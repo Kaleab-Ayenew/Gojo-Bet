@@ -10,7 +10,7 @@ from rest_framework.parsers import JSONParser
 
 from main.serializers import UserSerializer, UserProfileSerializer, FollowingSerializer
 from django.contrib.auth.models import User
-from .models import UserProfile
+from .models import UserProfile, Following
 # Create your views here.
 def index(request):
 
@@ -117,3 +117,36 @@ def edit_profile(request):
         return Response(data)
 
 
+@api_view(['GET','POST'])
+def followers(request, user_name):
+
+
+    if request.method == "POST":
+        data = {}
+        try:
+            user = User.objects.get(username=user_name)
+        except User.DoesNotExist:
+            return Response({"Status":"User doesn't exist"})
+
+        query = Following.objects.filter(followed=user)
+        data['follower_number'] = len(query)
+        data['follower_list'] = [f"{i.first_name} {i.last_name}" for i in query]
+
+        return Response(data)
+            
+@api_view(['GET','POST'])
+def followers(request, user_name):
+
+
+    if request.method == "POST":
+        data = {}
+        try:
+            user = User.objects.get(username=user_name)
+        except User.DoesNotExist:
+            return Response({"Status":"User doesn't exist"})
+
+        query = Following.objects.filter(following=user)
+        data['following_number'] = len(query)
+        data['following_list'] = [f"{i.first_name} {i.last_name}" for i in query]
+
+        return Response(data)
