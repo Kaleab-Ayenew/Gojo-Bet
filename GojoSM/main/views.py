@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.db.models import Q
+from django.core.serializers import json
 
 from datetime import datetime 
 
@@ -8,9 +10,9 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser
 
-from main.serializers import UserSerializer, UserProfileSerializer, FollowingSerializer
+from main.serializers import UserSerializer, UserProfileSerializer, FollowingSerializer, PostSerializer
 from django.contrib.auth.models import User
-from .models import UserProfile, Following
+from .models import UserProfile, Following, Post
 # Create your views here.
 def index(request):
 
@@ -70,6 +72,14 @@ def sign_up(request):
 def follow(request):
     
     data = request.data
+    try:
+        follower = User.objects.get(username=data['follower'])
+        followed = User.objects.get(username=data['followed'])
+    except User.DoesNotExist:
+        return Response({"Status":"User doesn't exist!"})
+    
+    data['follower'] = follower.pk
+    data['followed'] = followed.pk
     serializer = FollowingSerializer(data=data)
 
     if serializer.is_valid(raise_exception=True):
@@ -88,20 +98,21 @@ def delete_account(request):
     try:
         user = User.objects.get(username=username)
         user.delete()
-        Response({"Status": "User has been deleted!"})
+        return Response({"Status": "User has been deleted!"})
     except User.DoesNotExist:
-        Response({"Status":"The Specified User doesn't exist!"})
+        return Response({"Status":"The Specified User doesn't exist!"})
     except Exception as c:
         print(c)
+        return Response({"Status":"Request failed"})
 
 @api_view(['GET','POST'])
 def edit_profile(request):
     if request.method == "GET":
-        Response({"Status": "Not there Yet!"})
+        return Response({"Status": "Not there Yet!"})
 
     elif request.method == "POST":
         data = request.data
-        username = data['user']
+        username = data['username']
         try:
             data['user'] = User.objects.get(username=username).pk
         except User.DoesNotExist:
@@ -130,12 +141,20 @@ def followers(request, user_name):
 
         query = Following.objects.filter(followed=user)
         data['follower_number'] = len(query)
-        data['follower_list'] = [f"{i.first_name} {i.last_name}" for i in query]
+        f_list = []
+        for q in query:
+            u_prof = UserProfile.objects.get(user=q.follower)
+            f_list.append(f"{u_prof.first_name} {u_prof.last_name}")
+        data['follower_list'] = f_list
 
         return Response(data)
+    
+    elif request.method == "GET":
+
+        return HttpResponse("Not there YET!")
             
 @api_view(['GET','POST'])
-def followers(request, user_name):
+def following(request, user_name):
 
 
     if request.method == "POST":
@@ -145,8 +164,95 @@ def followers(request, user_name):
         except User.DoesNotExist:
             return Response({"Status":"User doesn't exist"})
 
-        query = Following.objects.filter(following=user)
+        query = Following.objects.filter(follower=user)
         data['following_number'] = len(query)
-        data['following_list'] = [f"{i.first_name} {i.last_name}" for i in query]
+        f_list = []
+        for q in query:
+            u_prof = UserProfile.objects.get(user=q.followed)
+            f_list.append(f"{u_prof.first_name} {u_prof.last_name}")
+        data['following_list'] = f_list
 
         return Response(data)
+
+    elif request.method == "GET":
+
+        return HttpResponse("Not there YET!")
+
+@api_view(["GET","POST"])
+def profile(request, user_name):
+
+    if request.method == "GET":
+        try: 
+            user = User.objects.get(username = user_name)
+        except User.DoesNotExist:
+            return HttpResponse("User doesn't exist!")
+
+        user_profile= UserProfile.objects.get(user= user)
+        return HttpResponse(f"This is the profile of {user_profile.first_name} {user_profile.last_name}")
+
+    elif request.method == "POST":
+        try:
+            user = User.objects.get(username = user_name)
+        except User.DoesNotExist:
+            return Response({"Status":"User doesn't exist"})
+        user_profile = UserProfile.objects.get(user=user)
+        data = UserProfileSerializer(user_profile).data
+
+        return Response(data)
+        
+
+@api_view(["GET","POST"])
+def create_post(request):
+    if request.method == "POST":
+
+        data = request.data
+        """ 
+        Expected data = {"author":"username", 
+        "post-date-time":"YYYY-MM-DD HH:MM:SS", 
+        "content":"Every thing you can imagine"}
+        """
+        data['author'] = User.objects.get(username=data['author']).pk
+        data['post_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        serializer = PostSerializer(data=data)
+        if serializer.is_valid(raise_exception=True):
+            post_obj = serializer.save()
+            val_data = serializer.data
+            val_data['status'] = "Sucess"
+            return Response(val_data)
+
+
+
+@api_view(["POST"])
+def get_posts(request, user_name):
+    serializer = json.Serializer()
+    if request.method == "POST":
+        try:
+            author = User.objects.get(username=user_name)
+            posts = Post.objects.filter(author=author)
+        except User.DoesNotExist:
+            return Response({"status":"This user doesn't exist!"})
+        post_list = []
+        for p in posts:
+            data = PostSerializer(p).data
+            author_user = User.objects.get(pk=data['author'])
+            author_profile = UserProfile.objects.get(user=author_user)
+            data['author'] = f"{author_profile.first_name}  {author_profile.last_name}"
+
+            post_list.append(data)
+        
+        return Response(post_list)
+   
+        
+
+@api_view(["POST"])
+def delete_post(request):
+    
+    if request.method == "POST":
+        post_id = request.data['post_id']
+
+        try:
+            post = Post.objects.get(pk=post_id)
+            post.delete()
+            return Response({"Status":"Post Deleted!"})
+        except Post.DoesNotExist:
+            return Response({"Status":"Post doesn't exist!"})

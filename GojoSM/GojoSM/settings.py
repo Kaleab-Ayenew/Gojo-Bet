@@ -54,6 +54,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'GojoSM.urls'
 
+REST_FRAMEWORK = {
+
+    'DATETIME_FORMAT': "%Y-%m-%d %H:%M:%S",
+}
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -105,6 +110,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.1/topics/i18n/
+
+
 
 LANGUAGE_CODE = 'en-us'
 

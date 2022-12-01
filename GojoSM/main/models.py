@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django_countries.fields import CountryField
-
+from datetime import datetime
 class UserProfile(models.Model):
     
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
@@ -35,3 +35,11 @@ class Following(models.Model):
 
     def __str__(self):
         return f"{self.follower.username} followed {self.followed.username}"
+
+class Post(models.Model):
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    post_time = models.DateTimeField()
+    content = models.TextField(max_length=1000)
+
+    def __str__(self):
+        return self.author.username + " | " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
