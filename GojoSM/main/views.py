@@ -5,7 +5,8 @@ from django.db.models import Q
 from django.core.serializers import json
 from django.shortcuts import redirect
 
-from datetime import datetime 
+from datetime import datetime
+import random
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -270,8 +271,8 @@ def delete_post(request):
                 return Response({"Status":"Post Deleted!"})
             except Post.DoesNotExist:
                 return Response({"Status":"Post doesn't exist!"})
-        else:
-            return Response({"Status":"You are not logged in!"})
+    else:
+        return Response({"Status":"You are not logged in!"})
 
 @api_view(['POST'])
 def login_view(request):
@@ -291,4 +292,46 @@ def login_view(request):
 @api_view(["POST"])
 def logout_view(request):
     logout(request)
-    return redirect("index")
+    return redirect("index_url")
+
+
+@api_view(['POST'])
+def unfollow(request):
+    
+    if request.user.is_authenticated:
+        data = request.data
+        try:
+            user = User.objects.get(username=request.user.username)
+            followed_user = User.objects.get(username=data['followed'])
+        except User.DoesNotExist:
+            return Response({"Status":"User doesn't exist"})
+
+        query = Following.objects.get(follower=user, followed=followed_user)
+        query.delete()
+        
+        return Response({"Status": "Succesfully Unfollowed!"})
+    else:
+        return Response({"Status":"You are not logged in!"})
+
+@api_view(['GET','POST'])
+def home_feed(request):
+    if request.user.is_authenticated:
+        if request.method == "POST":
+            user = User.objects.get(username=request.user.username)
+            following = [followed.followed for followed in Following.objects.filter(follower=user)]
+            post_list = []
+            for f in following:
+                posts = Post.objects.filter(author=f)
+                if posts:
+                    for p in posts:
+                        post = PostSerializer(p).data
+                        author_user = User.objects.get(pk=post['author'])
+                        post['author'] = author_user.username
+                        post_list.append(post)
+                else:
+                    continue
+
+            random.shuffle(post_list)
+            return Response(post_list)
+        elif request.method == "GET":
+            return HttpResponse("comming soon")
