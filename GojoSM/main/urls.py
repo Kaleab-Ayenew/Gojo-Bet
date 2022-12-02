@@ -14,4 +14,7 @@ path('@<str:user_name>/', views.profile, name="profile_url"),
 path('post/', views.create_post, name = "create_post_url"),
 path('@<str:user_name>/posts/', views.get_posts, name="get_post_url"),
 path('delete-post/', views.delete_post, name="delete_post_url"),
+#Session management functions
+path('login/', views.login_view, name="login_view_url"),
+path('logout/', views.logout_view, name="logout_view_url")
 ]

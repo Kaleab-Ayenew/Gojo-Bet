@@ -3,6 +3,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
 from django.core.serializers import json
+from django.shortcuts import redirect
 
 from datetime import datetime 
 
@@ -12,6 +13,7 @@ from rest_framework.parsers import JSONParser
 
 from main.serializers import UserSerializer, UserProfileSerializer, FollowingSerializer, PostSerializer
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, login, logout
 from .models import UserProfile, Following, Post
 # Create your views here.
 def index(request):
@@ -72,60 +74,69 @@ def sign_up(request):
 def follow(request):
     
     data = request.data
-    try:
-        follower = User.objects.get(username=data['follower'])
-        followed = User.objects.get(username=data['followed'])
-    except User.DoesNotExist:
-        return Response({"Status":"User doesn't exist!"})
-    
-    data['follower'] = follower.pk
-    data['followed'] = followed.pk
-    serializer = FollowingSerializer(data=data)
+    if request.user.is_authenticated:
+        try:
+            follower = User.objects.get(username=request.user.username)
+            followed = User.objects.get(username=data['followed'])
+        except User.DoesNotExist:
+            return Response({"Status":"User doesn't exist!"})
+        
+        data['follower'] = follower.pk
+        data['followed'] = followed.pk
+        serializer = FollowingSerializer(data=data)
 
-    if serializer.is_valid(raise_exception=True):
-        fol_obj = serializer.save()
-        rspdata = serializer.data
-        rspdata['Status'] = "OK"
-        return Response(rspdata)
+        if serializer.is_valid(raise_exception=True):
+            fol_obj = serializer.save()
+            rspdata = serializer.data
+            rspdata['Status'] = "OK"
+            return Response(rspdata)
+        else:
+            return Response({"Status" : "Failed"})
     else:
-        return Response({"Status" : "Failed"})
+        return Response({"Status":"Please login!"})
 
 @api_view(['POST'])
 def delete_account(request):
     data = request.data
-
-    username = data['username']
-    try:
-        user = User.objects.get(username=username)
-        user.delete()
-        return Response({"Status": "User has been deleted!"})
-    except User.DoesNotExist:
-        return Response({"Status":"The Specified User doesn't exist!"})
-    except Exception as c:
-        print(c)
-        return Response({"Status":"Request failed"})
+    
+    if request.user.is_authenticated:
+        username = request.user.username
+        try:
+            user = User.objects.get(username=username)
+            user.delete()
+            return Response({"Status": "User has been deleted!"})
+        except User.DoesNotExist:
+            return Response({"Status":"The Specified User doesn't exist!"})
+        except Exception as c:
+            print(c)
+            return Response({"Status":"Request failed"})
+    else:
+        return Response({"Status":"You are not logged in!"})
 
 @api_view(['GET','POST'])
 def edit_profile(request):
-    if request.method == "GET":
-        return Response({"Status": "Not there Yet!"})
+    if request.user.is_authenticated:
+        if request.method == "GET":
+            return Response({"Status": "Not there Yet!"})
 
-    elif request.method == "POST":
-        data = request.data
-        username = data['username']
-        try:
-            data['user'] = User.objects.get(username=username).pk
-        except User.DoesNotExist:
-            return Response({"Error":"The User Doesn't exist"})
-        validated_data = data
-        profile = UserProfile.objects.get(pk=validated_data['user'])
-        profile.first_name = validated_data['first_name']
-        profile.last_name = validated_data['last_name']
-        profile.country = validated_data['country']
-        profile.birth_date = validated_data['birth_date']
-        profile.save()
+        elif request.method == "POST":
+            data = request.data
+            username = request.user.username
+            try:
+                data['user'] = User.objects.get(username=username).pk
+            except User.DoesNotExist:
+                return Response({"Error":"The User Doesn't exist"})
+            validated_data = data
+            profile = UserProfile.objects.get(pk=validated_data['user'])
+            profile.first_name = validated_data['first_name']
+            profile.last_name = validated_data['last_name']
+            profile.country = validated_data['country']
+            profile.birth_date = validated_data['birth_date']
+            profile.save()
 
         return Response(data)
+    else:
+        return Response({"Status":"You are not logged in!"})
 
 
 @api_view(['GET','POST'])
@@ -203,22 +214,25 @@ def profile(request, user_name):
 
 @api_view(["GET","POST"])
 def create_post(request):
-    if request.method == "POST":
+    if request.user.is_authenticated:
+        if request.method == "POST":
 
-        data = request.data
-        """ 
-        Expected data = {"author":"username", 
-        "post-date-time":"YYYY-MM-DD HH:MM:SS", 
-        "content":"Every thing you can imagine"}
-        """
-        data['author'] = User.objects.get(username=data['author']).pk
-        data['post_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        serializer = PostSerializer(data=data)
-        if serializer.is_valid(raise_exception=True):
-            post_obj = serializer.save()
-            val_data = serializer.data
-            val_data['status'] = "Sucess"
-            return Response(val_data)
+            data = request.data
+            """ 
+            Expected data = {"author":"username", 
+            "post-date-time":"YYYY-MM-DD HH:MM:SS", 
+            "content":"Every thing you can imagine"}
+            """
+            data['author'] = User.objects.get(username=data['author']).pk
+            data['post_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            serializer = PostSerializer(data=data)
+            if serializer.is_valid(raise_exception=True):
+                post_obj = serializer.save()
+                val_data = serializer.data
+                val_data['status'] = "Sucess"
+                return Response(val_data)
+    else:
+        return Response({"Status":"You are not logged in!"})
 
 
 
@@ -246,13 +260,35 @@ def get_posts(request, user_name):
 
 @api_view(["POST"])
 def delete_post(request):
-    
-    if request.method == "POST":
-        post_id = request.data['post_id']
+    if request.user.is_authenticated:
+        if request.method == "POST":
+            post_id = request.data['post_id']
 
-        try:
-            post = Post.objects.get(pk=post_id)
-            post.delete()
-            return Response({"Status":"Post Deleted!"})
-        except Post.DoesNotExist:
-            return Response({"Status":"Post doesn't exist!"})
+            try:
+                post = Post.objects.get(pk=post_id)
+                post.delete()
+                return Response({"Status":"Post Deleted!"})
+            except Post.DoesNotExist:
+                return Response({"Status":"Post doesn't exist!"})
+        else:
+            return Response({"Status":"You are not logged in!"})
+
+@api_view(['POST'])
+def login_view(request):
+    
+    data = request.data
+    username = data['username']
+    password = data['password']
+
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
+        login(request, user)
+        return Response({"Status":f"User {username} Succesfully logged In!"})
+        
+    else:
+        return Response({"Status":"Login failed, wrong credentials."})
+
+@api_view(["POST"])
+def logout_view(request):
+    logout(request)
+    return redirect("index")
